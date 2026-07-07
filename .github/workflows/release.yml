@@ -50,7 +50,7 @@ jobs:
 
       - name: Build
         run: |
-          dotnet build Jellyfin.Plugin.Serializd.sln -c Release \
+          dotnet build Jellyfin.Plugin.Serializd/Jellyfin.Plugin.Serializd.csproj -c Release \
             -p:Version=${{ steps.ver.outputs.version }} \
             -p:AssemblyVersion=${{ steps.ver.outputs.version }} \
             -p:FileVersion=${{ steps.ver.outputs.version }}
@@ -142,7 +142,6 @@ jobs:
           generate_release_notes: true
           files: |
             ${{ steps.pkg.outputs.zip }}
-            manifest.json
 
       - name: Commit manifest to main
         run: |
