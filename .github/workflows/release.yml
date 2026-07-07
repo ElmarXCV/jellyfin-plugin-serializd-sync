@@ -37,6 +37,7 @@ jobs:
         run: |
           RAW="${{ github.event.inputs.tag }}"
           [ -z "$RAW" ] && RAW="${GITHUB_REF#refs/tags/}"
+          RAW="$(echo "$RAW" | tr -d '[:space:]')"
           TAG="$RAW"
           V="${RAW#v}"
           IFS='.' read -ra P <<< "$V"
@@ -51,9 +52,9 @@ jobs:
       - name: Build
         run: |
           dotnet build Jellyfin.Plugin.SerializdSync/Jellyfin.Plugin.SerializdSync.csproj -c Release \
-            -p:Version=${{ steps.ver.outputs.version }} \
-            -p:AssemblyVersion=${{ steps.ver.outputs.version }} \
-            -p:FileVersion=${{ steps.ver.outputs.version }}
+            -p:Version="${{ steps.ver.outputs.version }}" \
+            -p:AssemblyVersion="${{ steps.ver.outputs.version }}" \
+            -p:FileVersion="${{ steps.ver.outputs.version }}"
 
       - name: Package
         id: pkg
