@@ -19,6 +19,7 @@ namespace Jellyfin.Plugin.SerializdSync.Services
     public class PlaybackScrobbler : IHostedService
     {
         private readonly ISessionManager _sessionManager;
+        private readonly IUserDataManager _userDataManager;
         private readonly ILogger<PlaybackScrobbler> _logger;
         private readonly SerializdApi _api;
         private readonly ConcurrentDictionary<string, Guid> _lastScrobbled = new();
@@ -26,10 +27,12 @@ namespace Jellyfin.Plugin.SerializdSync.Services
 
         public PlaybackScrobbler(
             ISessionManager sessionManager,
+            IUserDataManager userDataManager,
             ILogger<PlaybackScrobbler> logger,
             SerializdApi api)
         {
             _sessionManager = sessionManager;
+            _userDataManager = userDataManager;
             _logger = logger;
             _api = api;
         }
@@ -38,6 +41,7 @@ namespace Jellyfin.Plugin.SerializdSync.Services
         {
             _sessionManager.PlaybackProgress += OnPlaybackProgress;
             _sessionManager.PlaybackStopped += OnPlaybackStopped;
+            _userDataManager.UserDataSaved += OnUserDataSaved;
             return Task.CompletedTask;
         }
 
@@ -45,10 +49,11 @@ namespace Jellyfin.Plugin.SerializdSync.Services
         {
             _sessionManager.PlaybackProgress -= OnPlaybackProgress;
             _sessionManager.PlaybackStopped -= OnPlaybackStopped;
+            _userDataManager.UserDataSaved -= OnUserDataSaved;
             return Task.CompletedTask;
         }
 
-        private static bool CanBeScrobbled(UserConfig config, PlaybackProgressEventArgs e)
+        private static bool CanBeScrobbled(UserConfig config, PlaybackProgressEventArgs e, bool isStopped)
         {
             if (e.MediaInfo?.Type != BaseItemKind.Episode || !config.ScrobbleShows)
             {
@@ -56,21 +61,18 @@ namespace Jellyfin.Plugin.SerializdSync.Services
             }
 
             var runtime = e.MediaInfo.RunTimeTicks;
-            if (runtime is > 0)
+            if (runtime is not > 0)
             {
-                var percentage = e.PlaybackPositionTicks / (float)runtime * 100f;
-                if (percentage < config.ScrobblePercentage)
-                {
-                    return false;
-                }
-
-                if (runtime < TimeSpan.FromMinutes(config.MinLength).Ticks)
-                {
-                    return false;
-                }
+                return isStopped;
             }
 
-            return true;
+            var percentage = e.PlaybackPositionTicks / (float)runtime * 100f;
+            if (percentage < config.ScrobblePercentage)
+            {
+                return false;
+            }
+
+            return runtime >= TimeSpan.FromMinutes(config.MinLength).Ticks;
         }
 
         private async void OnPlaybackProgress(object? sender, PlaybackProgressEventArgs e)
@@ -90,7 +92,7 @@ namespace Jellyfin.Plugin.SerializdSync.Services
                 }
 
                 _nextTry[sessionId] = DateTime.UtcNow.AddSeconds(timeout);
-                await ScrobbleSession(e).ConfigureAwait(false);
+                await ScrobbleSession(e, false).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -102,7 +104,7 @@ namespace Jellyfin.Plugin.SerializdSync.Services
         {
             try
             {
-                await ScrobbleSession(e).ConfigureAwait(false);
+                await ScrobbleSession(e, true).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -119,21 +121,69 @@ namespace Jellyfin.Plugin.SerializdSync.Services
             }
         }
 
-        private async Task ScrobbleSession(PlaybackProgressEventArgs e)
+        private async void OnUserDataSaved(object? sender, UserDataSaveEventArgs e)
+        {
+            try
+            {
+                if (e.SaveReason != UserDataSaveReason.TogglePlayed)
+                {
+                    return;
+                }
+
+                if (e.Item is not Episode episode)
+                {
+                    return;
+                }
+
+                var userConfig = SerializdPlugin.Instance?.Configuration.GetByGuid(e.UserId);
+                if (userConfig == null || string.IsNullOrEmpty(userConfig.UserToken) || !userConfig.ScrobbleShows)
+                {
+                    return;
+                }
+
+                if (!TryGetEpisodeIds(episode, out var showId, out var seasonNumber, out var episodeNumber))
+                {
+                    return;
+                }
+
+                var played = e.UserData.Played;
+                var ok = await RunWithReauth(
+                    userConfig,
+                    null,
+                    token => played
+                        ? LogEpisodeCore(showId, seasonNumber, episodeNumber, userConfig, token)
+                        : UnlogEpisodeCore(showId, seasonNumber, episodeNumber, token)).ConfigureAwait(false);
+
+                if (ok)
+                {
+                    _logger.LogInformation(
+                        "{Action} {Series} S{Season}E{Episode} on Serializd (manual)",
+                        played ? "Logged" : "Unlogged",
+                        episode.Series?.Name,
+                        seasonNumber,
+                        episodeNumber);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled error handling user-data change");
+            }
+        }
+
+        private async Task ScrobbleSession(PlaybackProgressEventArgs e, bool isStopped)
         {
             if (e.Session == null)
             {
                 return;
             }
 
-            var userId = e.Session.UserId;
-            var userConfig = SerializdPlugin.Instance?.Configuration.GetByGuid(userId);
+            var userConfig = SerializdPlugin.Instance?.Configuration.GetByGuid(e.Session.UserId);
             if (userConfig == null || string.IsNullOrEmpty(userConfig.UserToken))
             {
                 return;
             }
 
-            if (!CanBeScrobbled(userConfig, e))
+            if (!CanBeScrobbled(userConfig, e, isStopped))
             {
                 return;
             }
@@ -148,72 +198,105 @@ namespace Jellyfin.Plugin.SerializdSync.Services
                 return;
             }
 
+            if (!TryGetEpisodeIds(episode, out var showId, out var seasonNumber, out var episodeNumber))
+            {
+                return;
+            }
+
+            var ok = await RunWithReauth(
+                userConfig,
+                e.Session.UserName,
+                token => LogEpisodeCore(showId, seasonNumber, episodeNumber, userConfig, token)).ConfigureAwait(false);
+
+            if (ok)
+            {
+                _lastScrobbled[e.Session.Id] = episode.Id;
+                _logger.LogInformation(
+                    "Scrobbled {Series} S{Season}E{Episode} to Serializd for {User}",
+                    episode.Series?.Name,
+                    seasonNumber,
+                    episodeNumber,
+                    e.Session.UserName);
+            }
+        }
+
+        private bool TryGetEpisodeIds(Episode episode, out int showId, out int seasonNumber, out int episodeNumber)
+        {
+            showId = 0;
+            seasonNumber = 0;
+            episodeNumber = 0;
+
             var tmdbRaw = episode.Series?.GetProviderId(MetadataProvider.Tmdb);
             if (string.IsNullOrEmpty(tmdbRaw)
-                || !int.TryParse(tmdbRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var showId))
+                || !int.TryParse(tmdbRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out showId))
             {
-                _logger.LogInformation(
-                    "Skipping scrobble for {Name}: parent series has no TMDB id",
-                    episode.Name);
-                return;
+                _logger.LogInformation("Skipping {Name}: parent series has no TMDB id", episode.Name);
+                return false;
             }
 
-            if (episode.ParentIndexNumber is not int seasonNumber || episode.IndexNumber is not int episodeNumber)
+            if (episode.ParentIndexNumber is not int season || episode.IndexNumber is not int number)
             {
-                _logger.LogInformation("Skipping scrobble for {Name}: missing season/episode number", episode.Name);
-                return;
+                _logger.LogInformation("Skipping {Name}: missing season/episode number", episode.Name);
+                return false;
             }
 
-            async Task<bool> AttemptScrobble()
+            seasonNumber = season;
+            episodeNumber = number;
+            return true;
+        }
+
+        private async Task<bool> LogEpisodeCore(int showId, int seasonNumber, int episodeNumber, UserConfig userConfig, string token)
+        {
+            var seasonId = await _api.ResolveSeasonIdAsync(showId, seasonNumber, token).ConfigureAwait(false);
+            if (seasonId is null)
             {
-                var seasonId = await _api.ResolveSeasonIdAsync(showId, seasonNumber, userConfig.UserToken).ConfigureAwait(false);
-                if (seasonId is null)
-                {
-                    return false;
-                }
-
-                if (!userConfig.LogToDiary)
-                {
-                    return await _api.LogEpisodeAsync(showId, seasonId.Value, episodeNumber, userConfig.UserToken).ConfigureAwait(false);
-                }
-
-                await _api.LogEpisodeAsync(showId, seasonId.Value, episodeNumber, userConfig.UserToken).ConfigureAwait(false);
-                return await _api.LogEpisodeToDiaryAsync(showId, seasonId.Value, episodeNumber, DateTime.UtcNow, userConfig.UserToken).ConfigureAwait(false);
+                return false;
             }
 
+            if (!userConfig.LogToDiary)
+            {
+                return await _api.LogEpisodeAsync(showId, seasonId.Value, episodeNumber, token).ConfigureAwait(false);
+            }
+
+            await _api.LogEpisodeAsync(showId, seasonId.Value, episodeNumber, token).ConfigureAwait(false);
+            return await _api.LogEpisodeToDiaryAsync(showId, seasonId.Value, episodeNumber, DateTime.UtcNow, token).ConfigureAwait(false);
+        }
+
+        private async Task<bool> UnlogEpisodeCore(int showId, int seasonNumber, int episodeNumber, string token)
+        {
+            var seasonId = await _api.ResolveSeasonIdAsync(showId, seasonNumber, token).ConfigureAwait(false);
+            if (seasonId is null)
+            {
+                return false;
+            }
+
+            return await _api.UnlogEpisodeAsync(showId, seasonId.Value, episodeNumber, token).ConfigureAwait(false);
+        }
+
+        private async Task<bool> RunWithReauth(UserConfig userConfig, string? userName, Func<string, Task<bool>> action)
+        {
             try
             {
-                bool success;
                 try
                 {
-                    success = await AttemptScrobble().ConfigureAwait(false);
+                    return await action(userConfig.UserToken).ConfigureAwait(false);
                 }
                 catch (InvalidTokenException)
                 {
-                    if (!await TryReauthenticate(userConfig, e.Session.UserName).ConfigureAwait(false))
+                    if (!await TryReauthenticate(userConfig, userName).ConfigureAwait(false))
                     {
-                        return;
+                        return false;
                     }
 
-                    success = await AttemptScrobble().ConfigureAwait(false);
-                }
-
-                if (success)
-                {
-                    _lastScrobbled[e.Session.Id] = episode.Id;
-                    _logger.LogInformation(
-                        "Scrobbled {Series} S{Season}E{Episode} to Serializd for {User}",
-                        episode.Series?.Name,
-                        seasonNumber,
-                        episodeNumber,
-                        e.Session.UserName);
+                    return await action(userConfig.UserToken).ConfigureAwait(false);
                 }
             }
             catch (InvalidTokenException)
             {
-                _logger.LogWarning("Serializd re-authentication for {User} failed; clearing stored credentials", e.Session.UserName);
+                _logger.LogWarning("Serializd re-authentication for {User} failed; clearing stored credentials", userName);
                 SerializdPlugin.Instance?.Configuration.ClearCredentials(userConfig.Id);
                 SerializdPlugin.Instance?.SaveConfiguration();
+                return false;
             }
         }
 
