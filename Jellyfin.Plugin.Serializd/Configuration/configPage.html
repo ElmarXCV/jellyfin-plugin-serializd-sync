@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Serializd</title>
+</head>
+<body>
+<div data-role="page" class="page type-interior pluginConfigurationPage" id="SerializdConfigurationPage"
+     data-require="emby-button,emby-checkbox,emby-input,emby-select">
+    <div data-role="content">
+        <div class="content-primary">
+            <h1>Serializd TV Tracker</h1>
+            <form id="SerializdConfigurationForm">
+                <div id="selectContainer">
+                    <select onchange="SerializdConfig.onSelectorChange();" is="emby-select" id="user-selector"
+                            label="Showing plugin settings for...">
+                    </select>
+                </div>
+
+                <div id="loginContainer" hidden>
+                    <h3>Log in to your Serializd account</h3>
+                    <div class="inputContainer">
+                        <input is="emby-input" id="serializdEmail" type="email" label="Email" />
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" id="serializdPassword" type="password" label="Password" />
+                    </div>
+                    <div class="fieldDescription">
+                        Your password is stored encrypted so the plugin can refresh your Serializd
+                        session automatically when the login token expires.
+                    </div>
+                    <button onclick="SerializdConfig.login();" is="emby-button" type="button"
+                            class="raised button-submit block"><span>Log In</span></button>
+                    <button onclick="location.href='https://www.serializd.com/';" is="emby-button" type="button"
+                            class="raised block"><span>Create an account</span></button>
+                </div>
+
+                <div id="optionsContainer" hidden>
+                    <h3>Hello again <span id="serializdName">USERNAME</span>!</h3>
+                    <button onclick="SerializdConfig.logout();" is="emby-button" type="button" class="raised button block">
+                        <span>Log Out</span></button>
+                    <h2>Scrobbling options</h2>
+                    <div class="checkboxcontainer">
+                        <label>
+                            <input is="emby-checkbox" type="checkbox" id="ScrobbleShows" />
+                            <span>Auto-scrobble TV shows</span>
+                        </label>
+                    </div>
+                    <div class="checkboxcontainer">
+                        <label>
+                            <input is="emby-checkbox" type="checkbox" id="LogToDiary" />
+                            <span>Log to diary with watch date (off: just mark watched)</span>
+                        </label>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" id="ScrobblePercentage" type="number" min="0" max="100" pattern="[0-9]*"
+                               label="Scrobbling percentage" />
+                        <div class="fieldDescription">Percentage watched needed before an episode is scrobbled.</div>
+                    </div>
+                    <div class="inputContainer">
+                        <input is="emby-input" id="MinLength" type="number" min="0" pattern="[0-9]*"
+                               label="Minimum length (minutes)" />
+                    </div>
+                    <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        var SerializdConfig = {
+            guid: "4C5E4DAF-FD7C-4F1D-9B47-C011D9070D94",
+            config: null,
+
+            userSelector: document.querySelector('#user-selector'),
+            loginContainer: document.querySelector('#loginContainer'),
+            optionsContainer: document.querySelector('#optionsContainer'),
+            serializdName: document.querySelector('#serializdName'),
+
+            populateUsers: function (users) {
+                users.forEach(function (user) {
+                    SerializdConfig.userSelector.append(new Option(user.Name, user.Id));
+                });
+            },
+
+            loadConfig: function (config) {
+                if (config != null) {
+                    this.config = config;
+                }
+
+                var userId = this.userSelector.value;
+                var uc = (this.config.UserConfigs || []).filter(function (c) { return c.Id === userId; })[0];
+
+                this.loginContainer.setAttribute('hidden', '');
+                this.optionsContainer.setAttribute('hidden', '');
+
+                if (uc && uc.UserToken) {
+                    this.serializdName.innerText = uc.Username || '';
+                    document.querySelector('#ScrobbleShows').checked = uc.ScrobbleShows;
+                    document.querySelector('#LogToDiary').checked = uc.LogToDiary;
+                    document.querySelector('#ScrobblePercentage').value = uc.ScrobblePercentage;
+                    document.querySelector('#MinLength').value = uc.MinLength;
+                    this.optionsContainer.removeAttribute('hidden');
+                } else {
+                    this.loginContainer.removeAttribute('hidden');
+                }
+            },
+
+            login: function () {
+                var userId = this.userSelector.value;
+                var email = document.querySelector('#serializdEmail').value;
+                var password = document.querySelector('#serializdPassword').value;
+                Dashboard.showLoadingMsg();
+
+                window.ApiClient.ajax({
+                    type: 'POST',
+                    url: window.ApiClient.getUrl('Serializd/Login'),
+                    data: JSON.stringify({ UserId: userId, Email: email, Password: password }),
+                    contentType: 'application/json',
+                    dataType: 'json'
+                }).then(function (result) {
+                    Dashboard.hideLoadingMsg();
+                    if (result && result.Success) {
+                        document.querySelector('#serializdPassword').value = '';
+                        window.ApiClient.getPluginConfiguration(SerializdConfig.guid)
+                            .then(SerializdConfig.loadConfig.bind(SerializdConfig));
+                    } else {
+                        Dashboard.alert('Login failed. Check your email and password.');
+                    }
+                }).catch(function () {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert('Login request failed, see browser logs.');
+                });
+            },
+
+            logout: function () {
+                var userId = this.userSelector.value;
+                Dashboard.showLoadingMsg();
+                window.ApiClient.ajax({
+                    type: 'POST',
+                    url: window.ApiClient.getUrl('Serializd/Logout'),
+                    data: JSON.stringify({ UserId: userId }),
+                    contentType: 'application/json'
+                }).then(function () {
+                    window.ApiClient.getPluginConfiguration(SerializdConfig.guid)
+                        .then(function (c) {
+                            Dashboard.hideLoadingMsg();
+                            SerializdConfig.loadConfig(c);
+                        });
+                });
+            },
+
+            save: function () {
+                var userId = this.userSelector.value;
+                var uc = (this.config.UserConfigs || []).filter(function (c) { return c.Id === userId; })[0];
+                if (!uc) {
+                    return;
+                }
+
+                uc.ScrobbleShows = document.querySelector('#ScrobbleShows').checked;
+                uc.LogToDiary = document.querySelector('#LogToDiary').checked;
+                uc.ScrobblePercentage = parseInt(document.querySelector('#ScrobblePercentage').value, 10);
+                uc.MinLength = parseInt(document.querySelector('#MinLength').value, 10);
+
+                window.ApiClient.updatePluginConfiguration(this.guid, this.config)
+                    .then(Dashboard.processPluginConfigurationUpdateResult);
+            },
+
+            onSelectorChange: function () {
+                this.loadConfig();
+            }
+        };
+
+        document.querySelector('#SerializdConfigurationPage')
+            .addEventListener('pageshow', function () {
+                Dashboard.showLoadingMsg();
+                Promise.all([
+                    window.ApiClient.getUsers().then(SerializdConfig.populateUsers),
+                    window.ApiClient.getPluginConfiguration(SerializdConfig.guid)
+                ]).then(function (results) {
+                    SerializdConfig.loadConfig(results[1]);
+                    Dashboard.hideLoadingMsg();
+                });
+            });
+
+        document.querySelector('#SerializdConfigurationForm')
+            .addEventListener('submit', function (e) {
+                e.preventDefault();
+                SerializdConfig.save();
+                return false;
+            });
+    </script>
+</div>
+</body>
+</html>

@@ -1,0 +1,158 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  GUID: '4C5E4DAF-FD7C-4F1D-9B47-C011D9070D94'
+  PLUGIN_NAME: 'Serializd'
+  DLL: 'Jellyfin.Plugin.Serializd/bin/Release/net9.0/Jellyfin.Plugin.Serializd.dll'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Resolve version
+        id: ver
+        run: |
+          RAW="${{ github.event.inputs.tag }}"
+          [ -z "$RAW" ] && RAW="${GITHUB_REF#refs/tags/}"
+          TAG="$RAW"
+          V="${RAW#v}"
+          IFS='.' read -ra P <<< "$V"
+          while [ "${#P[@]}" -lt 4 ]; do P+=("0"); done
+          VERSION="${P[0]}.${P[1]}.${P[2]}.${P[3]}"
+          ABI=$(grep -E '^targetAbi' build.yaml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "tag=$TAG"          >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"  >> "$GITHUB_OUTPUT"
+          echo "abi=$ABI"          >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG -> version $VERSION (targetAbi $ABI)"
+
+      - name: Build
+        run: |
+          dotnet build Jellyfin.Plugin.Serializd.sln -c Release \
+            -p:Version=${{ steps.ver.outputs.version }} \
+            -p:AssemblyVersion=${{ steps.ver.outputs.version }} \
+            -p:FileVersion=${{ steps.ver.outputs.version }}
+
+      - name: Package
+        id: pkg
+        run: |
+          VERSION='${{ steps.ver.outputs.version }}'
+          ABI='${{ steps.ver.outputs.abi }}'
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          ZIP="serializd_${VERSION}.zip"
+
+          mkdir -p package
+          cp "$DLL" package/
+
+          # meta.json is read by Jellyfin when installing the plugin
+          cat > package/meta.json <<EOF
+          {
+            "category": "General",
+            "guid": "${GUID}",
+            "name": "${PLUGIN_NAME}",
+            "description": "Scrobble your watched TV shows to Serializd as you play them in Jellyfin.",
+            "overview": "Scrobble watched TV to Serializd",
+            "owner": "${{ github.repository_owner }}",
+            "targetAbi": "${ABI}",
+            "framework": "net9.0",
+            "version": "${VERSION}",
+            "changelog": "Release ${{ steps.ver.outputs.tag }}",
+            "timestamp": "${TS}"
+          }
+          EOF
+
+          (cd package && zip -r "../${ZIP}" .)
+          CHECKSUM=$(md5sum "${ZIP}" | cut -d' ' -f1)
+          echo "zip=${ZIP}"           >> "$GITHUB_OUTPUT"
+          echo "checksum=${CHECKSUM}"  >> "$GITHUB_OUTPUT"
+          echo "timestamp=${TS}"       >> "$GITHUB_OUTPUT"
+
+      - name: Update manifest.json
+        run: |
+          VERSION='${{ steps.ver.outputs.version }}'
+          ABI='${{ steps.ver.outputs.abi }}'
+          TAG='${{ steps.ver.outputs.tag }}'
+          ZIP='${{ steps.pkg.outputs.zip }}'
+          URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${ZIP}"
+
+          NEW=$(jq -n \
+            --arg v "$VERSION" \
+            --arg c "Release ${TAG}" \
+            --arg abi "$ABI" \
+            --arg url "$URL" \
+            --arg sum '${{ steps.pkg.outputs.checksum }}' \
+            --arg ts '${{ steps.pkg.outputs.timestamp }}' \
+            '{version:$v, changelog:$c, targetAbi:$abi, sourceUrl:$url, checksum:$sum, timestamp:$ts}')
+
+          EXISTING='[]'
+          if [ -f manifest.json ]; then
+            # keep prior versions but drop any entry for the version being (re-)released
+            EXISTING=$(jq --arg g "$GUID" --arg v "$VERSION" \
+              '((.[] | select(.guid==$g) | .versions) // []) | map(select(.version != $v))' manifest.json)
+          fi
+
+          jq -n \
+            --arg guid "$GUID" \
+            --arg name "$PLUGIN_NAME" \
+            --arg desc "Scrobble your watched TV shows to Serializd as you play them in Jellyfin." \
+            --arg overview "Scrobble watched TV to Serializd" \
+            --arg owner "${{ github.repository_owner }}" \
+            --argjson nv "$NEW" \
+            --argjson existing "$EXISTING" \
+            '[{
+              guid: $guid,
+              name: $name,
+              description: $desc,
+              overview: $overview,
+              owner: $owner,
+              category: "General",
+              imageUrl: "",
+              versions: ([$nv] + $existing | unique_by(.version) | sort_by(.version) | reverse)
+            }]' > manifest.json
+
+          cat manifest.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            ${{ steps.pkg.outputs.zip }}
+            manifest.json
+
+      - name: Commit manifest to main
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if git diff --cached --quiet; then
+            echo "manifest.json unchanged"
+          else
+            git commit -m "chore: update manifest for ${{ steps.ver.outputs.tag }}"
+            git pull --rebase origin main || true
+            git push origin HEAD:main
+          fi
