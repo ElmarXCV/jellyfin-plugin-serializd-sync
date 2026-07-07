@@ -120,7 +120,6 @@ jobs:
             --arg desc "Scrobble your watched TV shows to Serializd as you play them in Jellyfin." \
             --arg overview "Scrobble watched TV to Serializd" \
             --arg owner "${{ github.repository_owner }}" \
-            --arg image "https://raw.githubusercontent.com/${{ github.repository }}/main/logo.png" \
             --argjson nv "$NEW" \
             --argjson existing "$EXISTING" \
             '[{
@@ -130,7 +129,7 @@ jobs:
               overview: $overview,
               owner: $owner,
               category: "General",
-              imageUrl: $image,
+              imageUrl: "",
               versions: ([$nv] + $existing | unique_by(.version) | sort_by(.version) | reverse)
             }]' > manifest.json
 
