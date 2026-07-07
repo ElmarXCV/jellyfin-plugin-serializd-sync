@@ -154,6 +154,36 @@ namespace Jellyfin.Plugin.SerializdSync.API
             return true;
         }
 
+        public async Task<bool> UnlogEpisodeAsync(int showId, int seasonId, int episodeNumber, string token, CancellationToken cancellationToken = default)
+        {
+            var body = new LogEpisodesRequest
+            {
+                ShowId = showId,
+                SeasonId = seasonId,
+                EpisodeNumbers = new[] { episodeNumber }
+            };
+
+            using var request = CreateRequest(HttpMethod.Post, "/episode_log/remove", token, body);
+            var response = await Send(request, cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                throw new InvalidTokenException("Serializd rejected the stored access token");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError(
+                    "Failed to remove log for S{Season}E{Episode} of show {Show}: status {Status}",
+                    seasonId,
+                    episodeNumber,
+                    showId,
+                    response.StatusCode);
+                return false;
+            }
+
+            return true;
+        }
+
         private HttpRequestMessage CreateRequest(HttpMethod method, string path, string? token = null, object? body = null)
         {
             var request = new HttpRequestMessage(method, BaseUrl + path);
