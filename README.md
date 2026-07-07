@@ -1,4 +1,4 @@
-# Unofficial Jellyfin Serializd Plugin
+# Unofficial Jellyfin Serializd Sync Plugin
 
 Auto-scrobble watched TV shows to [Serializd](https://www.serializd.com) as you play
 them in Jellyfin.
@@ -16,9 +16,9 @@ uses, so it may break if that changes.
 Add the repository in Jellyfin (Dashboard → Plugins → Repositories → +):
 
 ```
-https://raw.githubusercontent.com/ElmarXCV/jellyfin-plugin-serializd/main/manifest.json
+https://raw.githubusercontent.com/ElmarXCV/jellyfin-plugin-serializd-sync/main/manifest.json
 ```
 
 Install Serializd from the catalog and restart. Or side-load manually: copy
-`Jellyfin.Plugin.Serializd.dll` into a `plugins/Serializd/` folder in your Jellyfin
+`Jellyfin.Plugin.SerializdSync.dll` into a `plugins/SerializdSync/` folder in your Jellyfin
 data directory and restart.

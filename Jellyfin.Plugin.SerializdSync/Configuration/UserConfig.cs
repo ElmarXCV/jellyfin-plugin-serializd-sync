@@ -1,6 +1,6 @@
 using System;
 
-namespace Jellyfin.Plugin.Serializd.Configuration
+namespace Jellyfin.Plugin.SerializdSync.Configuration
 {
     public class UserConfig
     {

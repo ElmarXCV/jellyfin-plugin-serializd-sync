@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using Microsoft.AspNetCore.DataProtection;
 
-namespace Jellyfin.Plugin.Serializd.Configuration
+namespace Jellyfin.Plugin.SerializdSync.Configuration
 {
     public static class SecretProtector
     {
@@ -18,7 +18,7 @@ namespace Jellyfin.Plugin.Serializd.Configuration
 
             _protector = DataProtectionProvider
                 .Create(dir)
-                .CreateProtector("Jellyfin.Plugin.Serializd.Credentials");
+                .CreateProtector("Jellyfin.Plugin.SerializdSync.Credentials");
         }
 
         public static string Protect(string plaintext)

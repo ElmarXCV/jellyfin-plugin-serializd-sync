@@ -21,13 +21,13 @@ jobs:
           dotnet-version: 9.0.x
 
       - name: Restore
-        run: dotnet restore Jellyfin.Plugin.Serializd.sln
+        run: dotnet restore Jellyfin.Plugin.SerializdSync.sln
 
       - name: Build
-        run: dotnet build Jellyfin.Plugin.Serializd.sln -c Release --no-restore
+        run: dotnet build Jellyfin.Plugin.SerializdSync.sln -c Release --no-restore
 
       - name: Upload DLL artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Jellyfin.Plugin.Serializd
-          path: Jellyfin.Plugin.Serializd/bin/Release/net9.0/Jellyfin.Plugin.Serializd.dll
+          name: Jellyfin.Plugin.SerializdSync
+          path: Jellyfin.Plugin.SerializdSync/bin/Release/net9.0/Jellyfin.Plugin.SerializdSync.dll

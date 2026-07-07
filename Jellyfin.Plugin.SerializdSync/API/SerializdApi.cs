@@ -10,12 +10,12 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Plugin.Serializd.API.Exceptions;
-using Jellyfin.Plugin.Serializd.API.Objects;
+using Jellyfin.Plugin.SerializdSync.API.Exceptions;
+using Jellyfin.Plugin.SerializdSync.API.Objects;
 using MediaBrowser.Common.Net;
 using Microsoft.Extensions.Logging;
 
-namespace Jellyfin.Plugin.Serializd.API
+namespace Jellyfin.Plugin.SerializdSync.API
 {
     public class SerializdApi
     {

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <RootNamespace>Jellyfin.Plugin.Serializd</RootNamespace>
+        <RootNamespace>Jellyfin.Plugin.SerializdSync</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

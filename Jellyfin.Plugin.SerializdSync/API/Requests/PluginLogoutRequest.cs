@@ -1,6 +1,6 @@
 using System;
 
-namespace Jellyfin.Plugin.Serializd.API.Requests
+namespace Jellyfin.Plugin.SerializdSync.API.Requests
 {
     public class PluginLogoutRequest
     {

@@ -1,4 +1,4 @@
-namespace Jellyfin.Plugin.Serializd.API.Exceptions
+namespace Jellyfin.Plugin.SerializdSync.API.Exceptions
 {
     public class InvalidTokenException : SerializdException
     {

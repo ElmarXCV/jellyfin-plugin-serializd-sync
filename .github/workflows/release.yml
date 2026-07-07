@@ -14,8 +14,8 @@ permissions:
 
 env:
   GUID: '4C5E4DAF-FD7C-4F1D-9B47-C011D9070D94'
-  PLUGIN_NAME: 'Serializd'
-  DLL: 'Jellyfin.Plugin.Serializd/bin/Release/net9.0/Jellyfin.Plugin.Serializd.dll'
+  PLUGIN_NAME: 'Serializd Sync'
+  DLL: 'Jellyfin.Plugin.SerializdSync/bin/Release/net9.0/Jellyfin.Plugin.SerializdSync.dll'
 
 jobs:
   release:
@@ -50,7 +50,7 @@ jobs:
 
       - name: Build
         run: |
-          dotnet build Jellyfin.Plugin.Serializd/Jellyfin.Plugin.Serializd.csproj -c Release \
+          dotnet build Jellyfin.Plugin.SerializdSync/Jellyfin.Plugin.SerializdSync.csproj -c Release \
             -p:Version=${{ steps.ver.outputs.version }} \
             -p:AssemblyVersion=${{ steps.ver.outputs.version }} \
             -p:FileVersion=${{ steps.ver.outputs.version }}
@@ -61,7 +61,7 @@ jobs:
           VERSION='${{ steps.ver.outputs.version }}'
           ABI='${{ steps.ver.outputs.abi }}'
           TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          ZIP="serializd_${VERSION}.zip"
+          ZIP="serializd_sync_${VERSION}.zip"
 
           mkdir -p package
           cp "$DLL" package/

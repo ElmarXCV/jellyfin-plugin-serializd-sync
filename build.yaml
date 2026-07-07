@@ -1,5 +1,5 @@
 ---
-name: "Serializd"
+name: "Serializd Sync"
 guid: "4C5E4DAF-FD7C-4F1D-9B47-C011D9070D94"
 version: "1.0.0.0"
 targetAbi: "10.11.0.0"
@@ -10,7 +10,7 @@ description: >
   Scrobble your watched TV shows to Serializd as you play them in Jellyfin.
 category: "General"
 artifacts:
-  - "Jellyfin.Plugin.Serializd.dll"
+  - "Jellyfin.Plugin.SerializdSync.dll"
 changelog: |-
   ### 1.0.0.0 ###
   - Initial release: real-time episode scrobbling to Serializd.

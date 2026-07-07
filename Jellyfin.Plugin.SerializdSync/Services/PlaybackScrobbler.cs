@@ -4,9 +4,9 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
-using Jellyfin.Plugin.Serializd.API;
-using Jellyfin.Plugin.Serializd.API.Exceptions;
-using Jellyfin.Plugin.Serializd.Configuration;
+using Jellyfin.Plugin.SerializdSync.API;
+using Jellyfin.Plugin.SerializdSync.API.Exceptions;
+using Jellyfin.Plugin.SerializdSync.Configuration;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
@@ -14,7 +14,7 @@ using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Jellyfin.Plugin.Serializd.Services
+namespace Jellyfin.Plugin.SerializdSync.Services
 {
     public class PlaybackScrobbler : IHostedService
     {

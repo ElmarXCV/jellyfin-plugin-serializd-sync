@@ -1,11 +1,11 @@
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Plugin.Serializd.API.Requests;
-using Jellyfin.Plugin.Serializd.API.Responses;
+using Jellyfin.Plugin.SerializdSync.API.Requests;
+using Jellyfin.Plugin.SerializdSync.API.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Jellyfin.Plugin.Serializd.API
+namespace Jellyfin.Plugin.SerializdSync.API
 {
     [ApiController]
     [Authorize(Policy = "RequiresElevation")]

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace Jellyfin.Plugin.Serializd.API.Objects
+namespace Jellyfin.Plugin.SerializdSync.API.Objects
 {
     public class LogEpisodesRequest
     {

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using MediaBrowser.Model.Plugins;
 
-namespace Jellyfin.Plugin.Serializd.Configuration
+namespace Jellyfin.Plugin.SerializdSync.Configuration
 {
     public class PluginConfiguration : BasePluginConfiguration
     {

@@ -1,4 +1,4 @@
-namespace Jellyfin.Plugin.Serializd.API.Responses
+namespace Jellyfin.Plugin.SerializdSync.API.Responses
 {
     public class LoginResult
     {

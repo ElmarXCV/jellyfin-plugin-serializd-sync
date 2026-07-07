@@ -1,10 +1,10 @@
-using Jellyfin.Plugin.Serializd.API;
-using Jellyfin.Plugin.Serializd.Services;
+using Jellyfin.Plugin.SerializdSync.API;
+using Jellyfin.Plugin.SerializdSync.Services;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Jellyfin.Plugin.Serializd
+namespace Jellyfin.Plugin.SerializdSync
 {
     public class PluginServiceRegistrator : IPluginServiceRegistrator
     {

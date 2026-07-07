@@ -1,6 +1,6 @@
 using System;
 
-namespace Jellyfin.Plugin.Serializd.API.Exceptions
+namespace Jellyfin.Plugin.SerializdSync.API.Exceptions
 {
     public class SerializdException : Exception
     {
